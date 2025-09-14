@@ -112,6 +112,8 @@ async def create_job(
     safe_name = Path(file.filename).name
     if not safe_name:
         raise HTTPException(400, "invalid filename")
+        
+=======
 
     raw_path = jdir/"input"/safe_name
     with open(raw_path, "wb") as f:

@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 
-// Utility functions for formatting timestamps
-function toSRT(segs) {
+// Utility functions for formatting timestampsfunction toSRT(segs) {
   const fmt = t => {
     const ms = Math.floor(t * 1000)
     const h = Math.floor(ms / 3600000)
@@ -55,6 +54,7 @@ export default function App() {
   const [text, setText] = useState('')
   const [segs, setSegs] = useState([])
   const [language, setLanguage] = useState('en')
+  const [prompt, setPrompt] = useState('') // New state for custom prompt
   const [taskType, setTaskType] = useState('transcribe') // New state for task type
   const [apiKey, setApiKey] = useState('') // State for API key
   const fileInputRef = useRef(null)
@@ -124,6 +124,12 @@ export default function App() {
       
       fd.append("response_format", "verbose_json")
       
+      // Add prompt if provided
+      if (prompt) {
+        fd.append("prompt", prompt)
+      }
+      
+      setLog(prev => [...prev, 'Uploading file to server...'])
       setLog(prev => [...prev, `Uploading file to server for ${taskType}...`])
       
       // Add task parameter to the API endpoint
@@ -242,6 +248,14 @@ export default function App() {
             </div>
             
             <div className="option-group">
+              <label className="option-label">Custom Prompt (Optional)</label>
+              <input
+                type="text"
+                value={prompt}
+                onChange={e => setPrompt(e.target.value)}
+                className="option-input"
+                placeholder="Enter custom vocabulary or style guidance..."
+              />
               <label className="option-label">Task Type</label>
               <select 
                 value={taskType} 
