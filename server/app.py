@@ -88,12 +88,18 @@ async def create_job(
     jdir = JOBS_DIR / jid
     (jdir/"input").mkdir(parents=True, exist_ok=True)
     (jdir/"out").mkdir(parents=True, exist_ok=True)
+ codex/fix-500-error-during-upload
 
     # sanitize the incoming filename, ensuring it is usable as a file
     safe_name = Path(file.filename or "").name
     if safe_name in ("", ".", ".."):
         raise HTTPException(400, "invalid filename")
 
+
+    safe_name = Path(file.filename).name
+    if not safe_name:
+        raise HTTPException(400, "invalid filename")
+ main
     raw_path = jdir/"input"/safe_name
     with open(raw_path, "wb") as f:
         f.write(await file.read())
