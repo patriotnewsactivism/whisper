@@ -45,6 +45,7 @@ export default function App() {
   const [text, setText] = useState('')
   const [segs, setSegs] = useState([])
   const [language, setLanguage] = useState('en')
+  const [prompt, setPrompt] = useState('') // New state for custom prompt
   const fileInputRef = useRef(null)
   const logContainerRef = useRef(null)
 
@@ -106,6 +107,11 @@ export default function App() {
       fd.append("model", "whisper-1")
       fd.append("language", language)
       fd.append("response_format", "verbose_json")
+      
+      // Add prompt if provided
+      if (prompt) {
+        fd.append("prompt", prompt)
+      }
       
       setLog(prev => [...prev, 'Uploading file to server...'])
       
@@ -218,6 +224,17 @@ export default function App() {
                 <option value="ja">Japanese</option>
                 <option value="ko">Korean</option>
               </select>
+            </div>
+            
+            <div className="option-group">
+              <label className="option-label">Custom Prompt (Optional)</label>
+              <input
+                type="text"
+                value={prompt}
+                onChange={e => setPrompt(e.target.value)}
+                className="option-input"
+                placeholder="Enter custom vocabulary or style guidance..."
+              />
             </div>
           </div>
         </div>
