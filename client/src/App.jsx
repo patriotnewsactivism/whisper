@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 
-// Utility functions for formatting timestampsfunction toSRT(segs) {
+// Utility functions for formatting timestamps
+function toSRT(segs) {
   const fmt = t => {
     const ms = Math.floor(t * 1000)
     const h = Math.floor(ms / 3600000)
@@ -8,9 +9,9 @@ import React, { useState, useRef, useEffect } from 'react'
     const s = Math.floor((ms % 60000) / 1000)
     const ms2 = ms % 1000
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms2).padStart(3, '0')}`
-    return segs.map((s, i) => `${i + 1}\n${fmt(s.start)} --> ${fmt(s.end)}\n${s.text.trim()}\n`).join('\n')
   }
-  
+  return segs.map((s, i) => `${i + 1}\n${fmt(s.start)} --> ${fmt(s.end)}\n${s.text.trim()}\n`).join('\n')
+}
 
 function toVTT(segs) {
   const fmt = t => {
@@ -24,14 +25,12 @@ function toVTT(segs) {
   return 'WEBVTT\n\n' + segs.map(s => `${fmt(s.start)} --> ${fmt(s.end)}\n${s.text.trim()}\n`).join('\n')
 }
 
-function toJSON(segs) {
-  return JSON.stringify(segs, null, 2)
+function toCSV(segs) {
+  return 'Start Time,End Time,Text\n' + segs.map(s => `"${s.start}","${s.end}","${s.text.replace(/"/g, '""')}"`).join('\n')
 }
 
-function toCSV(segs) {
-  const headers = 'start,end,text\n'
-  const rows = segs.map(s => `${s.start},${s.end},"${s.text.replace(/"/g, '""')}"`).join('\n')
-  return headers + rows
+function toJSON(segs) {
+  return JSON.stringify(segs, null, 2)
 }
 
 function download(name, text) {
@@ -50,13 +49,10 @@ export default function App() {
   const [file, setFile] = useState(null)
   const [status, setStatus] = useState('idle')
   const [log, setLog] = useState([])
-  const [modelId, setModelId] = useState('Xenova/whisper-small.en')
   const [text, setText] = useState('')
   const [segs, setSegs] = useState([])
   const [language, setLanguage] = useState('en')
   const [prompt, setPrompt] = useState('') // New state for custom prompt
-  const [taskType, setTaskType] = useState('transcribe') // New state for task type
-  const [apiKey, setApiKey] = useState('') // State for API key
   const fileInputRef = useRef(null)
   const logContainerRef = useRef(null)
 
@@ -116,12 +112,7 @@ export default function App() {
       const fd = new FormData()
       fd.append("file", file)
       fd.append("model", "whisper-1")
-      
-      // Add language parameter only for transcription (not translation)
-      if (taskType === 'transcribe') {
-        fd.append("language", language)
-      }
-      
+      fd.append("language", language)
       fd.append("response_format", "verbose_json")
       
       // Add prompt if provided
@@ -130,10 +121,8 @@ export default function App() {
       }
       
       setLog(prev => [...prev, 'Uploading file to server...'])
-      setLog(prev => [...prev, `Uploading file to server for ${taskType}...`])
       
-      // Add task parameter to the API endpoint
-      const res = await fetch(`/api/transcribe?task=${taskType}`, {
+      const res = await fetch("/api/transcribe", {
         method: "POST",
         body: fd
       })
@@ -161,7 +150,7 @@ export default function App() {
       
       setSegs(chunks)
       setStatus('done')
-      setLog(prev => [...prev, `${taskType === 'transcribe' ? 'Transcription' : 'Translation'} completed successfully!`])
+      setLog(prev => [...prev, 'Transcription completed successfully!'])
     } catch (err) {
       setStatus('error')
       setLog(prev => [...prev, `Error: ${err.message}`])
@@ -172,8 +161,8 @@ export default function App() {
   const baseName = file ? file.name.replace(/\.[^/.]+$/, '') : 'transcript'
   const srt = segs.length ? toSRT(segs) : ''
   const vtt = segs.length ? toVTT(segs) : ''
-  const json = segs.length ? toJSON(segs) : ''
   const csv = segs.length ? toCSV(segs) : ''
+  const json = segs.length ? toJSON(segs) : ''
 
   return (
     <div className="container">
@@ -213,25 +202,11 @@ export default function App() {
           <h2 className="section-title">Transcription Options</h2>
           <div className="options-grid">
             <div className="option-group">
-              <label className="option-label">Model</label>
-              <select
-                value={modelId}
-                onChange={e => setModelId(e.target.value)}
-                className="option-select"
-              >
-                <option value="Xenova/whisper-small.en">whisper-small.en (fast/accurate)</option>
-                <option value="Xenova/whisper-base.en">whisper-base.en (fastest)</option>
-                <option value="Xenova/whisper-medium.en">whisper-medium.en (better, slower)</option>
-              </select>
-            </div>
-            
-            <div className="option-group">
               <label className="option-label">Language</label>
               <select 
                 value={language} 
                 onChange={e => setLanguage(e.target.value)} 
                 className="option-select"
-                disabled={taskType === 'translate'} // Disable language selection for translation
               >
                 <option value="en">English</option>
                 <option value="es">Spanish</option>
@@ -256,15 +231,6 @@ export default function App() {
                 className="option-input"
                 placeholder="Enter custom vocabulary or style guidance..."
               />
-              <label className="option-label">Task Type</label>
-              <select 
-                value={taskType} 
-                onChange={e => setTaskType(e.target.value)} 
-                className="option-select"
-              >
-                <option value="transcribe">Transcribe</option>
-                <option value="translate">Translate to English</option>
-              </select>
             </div>
           </div>
         </div>
@@ -275,7 +241,7 @@ export default function App() {
             onClick={transcribe} 
             disabled={!file || status === 'processing'}
           >
-            {status === 'processing' ? 'Processing...' : (taskType === 'transcribe' ? 'Transcribe' : 'Translate')}
+            {status === 'processing' ? 'Processing...' : 'Transcribe'}
           </button>
         </div>
         
@@ -326,14 +292,14 @@ export default function App() {
                 onClick={() => download(`${baseName}.json`, json)} 
                 disabled={!json}
               >
-                📊 Download .json
+                📦 Download .json
               </button>
               <button 
                 className="download-button" 
                 onClick={() => download(`${baseName}.csv`, csv)} 
                 disabled={!csv}
               >
-                📈 Download .csv
+                📊 Download .csv
               </button>
               <button 
                 className="download-button copy-button" 
@@ -360,7 +326,7 @@ export default function App() {
         )}
         
         <div className="footer">
-          <p>Powered by OpenAI Whisper API | Client-side processing with @xenova/transformers</p>
+          <p>Powered by OpenAI Whisper API</p>
         </div>
       </div>
     </div>
