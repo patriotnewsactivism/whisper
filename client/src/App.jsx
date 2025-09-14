@@ -25,6 +25,16 @@ function toVTT(segs) {
   return 'WEBVTT\n\n' + segs.map(s => `${fmt(s.start)} --> ${fmt(s.end)}\n${s.text.trim()}\n`).join('\n')
 }
 
+function toJSON(segs) {
+  return JSON.stringify(segs, null, 2)
+}
+
+function toCSV(segs) {
+  const headers = 'start,end,text\n'
+  const rows = segs.map(s => `${s.start},${s.end},"${s.text.replace(/"/g, '""')}"`).join('\n')
+  return headers + rows
+}
+
 function download(name, text) {
   const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
   const url = URL.createObjectURL(blob)
@@ -45,6 +55,8 @@ export default function App() {
   const [text, setText] = useState('')
   const [segs, setSegs] = useState([])
   const [language, setLanguage] = useState('en')
+  const [taskType, setTaskType] = useState('transcribe') // New state for task type
+  const [apiKey, setApiKey] = useState('') // State for API key
   const fileInputRef = useRef(null)
   const logContainerRef = useRef(null)
 
@@ -104,12 +116,18 @@ export default function App() {
       const fd = new FormData()
       fd.append("file", file)
       fd.append("model", "whisper-1")
-      fd.append("language", language)
+      
+      // Add language parameter only for transcription (not translation)
+      if (taskType === 'transcribe') {
+        fd.append("language", language)
+      }
+      
       fd.append("response_format", "verbose_json")
       
-      setLog(prev => [...prev, 'Uploading file to server...'])
+      setLog(prev => [...prev, `Uploading file to server for ${taskType}...`])
       
-      const res = await fetch("/api/transcribe", {
+      // Add task parameter to the API endpoint
+      const res = await fetch(`/api/transcribe?task=${taskType}`, {
         method: "POST",
         body: fd
       })
@@ -137,7 +155,7 @@ export default function App() {
       
       setSegs(chunks)
       setStatus('done')
-      setLog(prev => [...prev, 'Transcription completed successfully!'])
+      setLog(prev => [...prev, `${taskType === 'transcribe' ? 'Transcription' : 'Translation'} completed successfully!`])
     } catch (err) {
       setStatus('error')
       setLog(prev => [...prev, `Error: ${err.message}`])
@@ -148,6 +166,8 @@ export default function App() {
   const baseName = file ? file.name.replace(/\.[^/.]+$/, '') : 'transcript'
   const srt = segs.length ? toSRT(segs) : ''
   const vtt = segs.length ? toVTT(segs) : ''
+  const json = segs.length ? toJSON(segs) : ''
+  const csv = segs.length ? toCSV(segs) : ''
 
   return (
     <div className="container">
@@ -205,6 +225,7 @@ export default function App() {
                 value={language} 
                 onChange={e => setLanguage(e.target.value)} 
                 className="option-select"
+                disabled={taskType === 'translate'} // Disable language selection for translation
               >
                 <option value="en">English</option>
                 <option value="es">Spanish</option>
@@ -219,6 +240,18 @@ export default function App() {
                 <option value="ko">Korean</option>
               </select>
             </div>
+            
+            <div className="option-group">
+              <label className="option-label">Task Type</label>
+              <select 
+                value={taskType} 
+                onChange={e => setTaskType(e.target.value)} 
+                className="option-select"
+              >
+                <option value="transcribe">Transcribe</option>
+                <option value="translate">Translate to English</option>
+              </select>
+            </div>
           </div>
         </div>
         
@@ -228,7 +261,7 @@ export default function App() {
             onClick={transcribe} 
             disabled={!file || status === 'processing'}
           >
-            {status === 'processing' ? 'Processing...' : 'Transcribe'}
+            {status === 'processing' ? 'Processing...' : (taskType === 'transcribe' ? 'Transcribe' : 'Translate')}
           </button>
         </div>
         
@@ -273,6 +306,20 @@ export default function App() {
                 disabled={!vtt}
               >
                 🎞️ Download .vtt
+              </button>
+              <button 
+                className="download-button" 
+                onClick={() => download(`${baseName}.json`, json)} 
+                disabled={!json}
+              >
+                📊 Download .json
+              </button>
+              <button 
+                className="download-button" 
+                onClick={() => download(`${baseName}.csv`, csv)} 
+                disabled={!csv}
+              >
+                📈 Download .csv
               </button>
               <button 
                 className="download-button copy-button" 

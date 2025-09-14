@@ -16,11 +16,19 @@ export default async (req) => {
       return new Response(JSON.stringify({ error: "Missing OPENAI_API_KEY" }), { status: 500 })
     }
 
+    const url = new URL(req.url)
+    const task = url.searchParams.get("task") || "transcribe"
+
+    // Validate task parameter
+    if (task !== "transcribe" && task !== "translate") {
+      return new Response(JSON.stringify({ error: "Invalid task parameter. Use 'transcribe' or 'translate'" }), { status: 400 })
+    }
+
     // Netlify gives you the raw request. We stream it straight to OpenAI.
     // IMPORTANT: we keep the same Content-Type (multipart/form-data; boundary=...)
     const contentType = req.headers.get("content-type") || ""
 
-    const openaiRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    const openaiRes = await fetch(`https://api.openai.com/v1/audio/${task}`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
