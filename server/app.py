@@ -88,11 +88,14 @@ async def create_job(
     jdir = JOBS_DIR / jid
     (jdir/"input").mkdir(parents=True, exist_ok=True)
     (jdir/"out").mkdir(parents=True, exist_ok=True)
-    raw_path = jdir/"input"/file.filename
+    safe_name = Path(file.filename).name
+    if not safe_name:
+        raise HTTPException(400, "invalid filename")
+    raw_path = jdir/"input"/safe_name
     with open(raw_path, "wb") as f:
         f.write(await file.read())
 
-    JOB_STATUS[jid] = {"state": "queued", "msg": "", "filename": file.filename}
+    JOB_STATUS[jid] = {"state": "queued", "msg": "", "filename": safe_name}
 
     async def run():
         def log(m):
