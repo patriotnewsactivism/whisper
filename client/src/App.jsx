@@ -8,9 +8,9 @@ import React, { useState, useRef, useEffect } from 'react'
     const s = Math.floor((ms % 60000) / 1000)
     const ms2 = ms % 1000
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms2).padStart(3, '0')}`
+    return segs.map((s, i) => `${i + 1}\n${fmt(s.start)} --> ${fmt(s.end)}\n${s.text.trim()}\n`).join('\n')
   }
-  return segs.map((s, i) => `${i + 1}\n${fmt(s.start)} --> ${fmt(s.end)}\n${s.text.trim()}\n`).join('\n')
-}
+  
 
 function toVTT(segs) {
   const fmt = t => {
