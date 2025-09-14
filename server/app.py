@@ -30,11 +30,11 @@ def ffmpeg_clean(inp: Path, out_wav: Path):
     cmd = ["ffmpeg", "-y", "-i", str(inp), "-ac", "1", "-ar", "16000", str(out_wav)]
     subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-def transcribe_segments(model: WhisperModel, wav: Path, language: str):
+def transcribe_segments(model: WhisperModel, wav: Path, language: str, task: str = "transcribe"):
     segments, info = model.transcribe(
         str(wav),
         language=language,
-        task="transcribe",
+        task=task,
         beam_size=5,
         vad_filter=True,
     )
@@ -64,6 +64,20 @@ def to_vtt(segs):
         out.append(s["text"]); out.append("")
     return "\n".join(out)
 
+def to_json(segs):
+    import json
+    return json.dumps(segs, indent=2)
+
+def to_csv(segs):
+    import csv
+    import io
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["start", "end", "text"])
+    for s in segs:
+        writer.writerow([s["start"], s["end"], s["text"]])
+    return output.getvalue()
+
 app = FastAPI(title="Whisper Transcriber")
 app.add_middleware(
     CORSMiddleware,
@@ -83,23 +97,22 @@ async def create_job(
     device: str = Form("cuda"),            # use "cpu" if no GPU/cudnn
     compute_type: str = Form("float16"),   # try "int8_float16" if VRAM is tight
     language: str = Form("en"),
+    task: str = Form("transcribe"),        # "transcribe" or "translate"
 ):
     jid = str(uuid.uuid4())
     jdir = JOBS_DIR / jid
     (jdir/"input").mkdir(parents=True, exist_ok=True)
     (jdir/"out").mkdir(parents=True, exist_ok=True)
- codex/fix-500-error-during-upload
 
     # sanitize the incoming filename, ensuring it is usable as a file
     safe_name = Path(file.filename or "").name
     if safe_name in ("", ".", ".."):
         raise HTTPException(400, "invalid filename")
 
-
     safe_name = Path(file.filename).name
     if not safe_name:
         raise HTTPException(400, "invalid filename")
- main
+
     raw_path = jdir/"input"/safe_name
     with open(raw_path, "wb") as f:
         f.write(await file.read())
@@ -133,12 +146,14 @@ async def create_job(
                         log(f"loading model {m} [{d}/{c}]")
                         mdl = get_model(m, d, c)
                         log("transcribing…")
-                        segs = transcribe_segments(mdl, wav, language)
+                        segs = transcribe_segments(mdl, wav, language, task)
                         stem = raw_path.stem
                         (jdir/"out"/f"{stem}.txt").write_text(
                             "\n".join(s["text"] for s in segs), encoding="utf-8")
                         (jdir/"out"/f"{stem}.srt").write_text(to_srt(segs), encoding="utf-8")
                         (jdir/"out"/f"{stem}.vtt").write_text(to_vtt(segs), encoding="utf-8")
+                        (jdir/"out"/f"{stem}.json").write_text(to_json(segs), encoding="utf-8")
+                        (jdir/"out"/f"{stem}.csv").write_text(to_csv(segs), encoding="utf-8")
                         JOB_STATUS[jid]["state"] = "done"
                         log("done")
                         return
