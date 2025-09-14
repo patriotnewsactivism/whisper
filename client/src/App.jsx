@@ -45,7 +45,6 @@ export default function App() {
   const [text, setText] = useState('')
   const [segs, setSegs] = useState([])
   const [language, setLanguage] = useState('en')
-  const [task, setTask] = useState('transcribe')
   const fileInputRef = useRef(null)
   const logContainerRef = useRef(null)
 
@@ -107,7 +106,6 @@ export default function App() {
       fd.append("model", "whisper-1")
       fd.append("language", language)
       fd.append("response_format", "verbose_json")
-      fd.append("task", task)
       
       setLog(prev => [...prev, 'Uploading file to server...'])
       
@@ -189,22 +187,10 @@ export default function App() {
           <h2 className="section-title">Transcription Options</h2>
           <div className="options-grid">
             <div className="option-group">
-              <label className="option-label">Task Type</label>
-              <select 
-                value={task} 
-                onChange={e => setTask(e.target.value)} 
-                className="option-select"
-              >
-                <option value="transcribe">Transcribe (speech to text)</option>
-                <option value="translate">Translate (to English)</option>
-              </select>
-            </div>
-            
-            <div className="option-group">
               <label className="option-label">Model</label>
-              <select 
-                value={modelId} 
-                onChange={e => setModelId(e.target.value)} 
+              <select
+                value={modelId}
+                onChange={e => setModelId(e.target.value)}
                 className="option-select"
               >
                 <option value="Xenova/whisper-small.en">whisper-small.en (fast/accurate)</option>
