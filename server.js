@@ -10,7 +10,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 app.use(express.static("client/dist"));
 
-// Enhanced transcribe endpoint with proper error handling
+// Transcribe endpoint with proper error handling
 app.post("/api/transcribe", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {

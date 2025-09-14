@@ -25,6 +25,14 @@ function toVTT(segs) {
   return 'WEBVTT\n\n' + segs.map(s => `${fmt(s.start)} --> ${fmt(s.end)}\n${s.text.trim()}\n`).join('\n')
 }
 
+function toCSV(segs) {
+  return 'Start Time,End Time,Text\n' + segs.map(s => `"${s.start}","${s.end}","${s.text.replace(/"/g, '""')}"`).join('\n')
+}
+
+function toJSON(segs) {
+  return JSON.stringify(segs, null, 2)
+}
+
 function download(name, text) {
   const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
   const url = URL.createObjectURL(blob)
@@ -41,7 +49,6 @@ export default function App() {
   const [file, setFile] = useState(null)
   const [status, setStatus] = useState('idle')
   const [log, setLog] = useState([])
-  const [modelId, setModelId] = useState('Xenova/whisper-small.en')
   const [text, setText] = useState('')
   const [segs, setSegs] = useState([])
   const [language, setLanguage] = useState('en')
@@ -154,6 +161,8 @@ export default function App() {
   const baseName = file ? file.name.replace(/\.[^/.]+$/, '') : 'transcript'
   const srt = segs.length ? toSRT(segs) : ''
   const vtt = segs.length ? toVTT(segs) : ''
+  const csv = segs.length ? toCSV(segs) : ''
+  const json = segs.length ? toJSON(segs) : ''
 
   return (
     <div className="container">
@@ -192,19 +201,6 @@ export default function App() {
         <div className="options-section">
           <h2 className="section-title">Transcription Options</h2>
           <div className="options-grid">
-            <div className="option-group">
-              <label className="option-label">Model</label>
-              <select
-                value={modelId}
-                onChange={e => setModelId(e.target.value)}
-                className="option-select"
-              >
-                <option value="Xenova/whisper-small.en">whisper-small.en (fast/accurate)</option>
-                <option value="Xenova/whisper-base.en">whisper-base.en (fastest)</option>
-                <option value="Xenova/whisper-medium.en">whisper-medium.en (better, slower)</option>
-              </select>
-            </div>
-            
             <div className="option-group">
               <label className="option-label">Language</label>
               <select 
@@ -292,6 +288,20 @@ export default function App() {
                 🎞️ Download .vtt
               </button>
               <button 
+                className="download-button" 
+                onClick={() => download(`${baseName}.json`, json)} 
+                disabled={!json}
+              >
+                📦 Download .json
+              </button>
+              <button 
+                className="download-button" 
+                onClick={() => download(`${baseName}.csv`, csv)} 
+                disabled={!csv}
+              >
+                📊 Download .csv
+              </button>
+              <button 
                 className="download-button copy-button" 
                 onClick={async () => {
                   try {
@@ -316,7 +326,7 @@ export default function App() {
         )}
         
         <div className="footer">
-          <p>Powered by OpenAI Whisper API | Client-side processing with @xenova/transformers</p>
+          <p>Powered by OpenAI Whisper API</p>
         </div>
       </div>
     </div>
