@@ -88,11 +88,17 @@ async def create_job(
     jdir = JOBS_DIR / jid
     (jdir/"input").mkdir(parents=True, exist_ok=True)
     (jdir/"out").mkdir(parents=True, exist_ok=True)
-    raw_path = jdir/"input"/file.filename
+
+    # sanitize the incoming filename, ensuring it is usable as a file
+    safe_name = Path(file.filename or "").name
+    if safe_name in ("", ".", ".."):
+        raise HTTPException(400, "invalid filename")
+
+    raw_path = jdir/"input"/safe_name
     with open(raw_path, "wb") as f:
         f.write(await file.read())
 
-    JOB_STATUS[jid] = {"state": "queued", "msg": "", "filename": file.filename}
+    JOB_STATUS[jid] = {"state": "queued", "msg": "", "filename": safe_name}
 
     async def run():
         def log(m):
@@ -144,7 +150,7 @@ async def create_job(
         await loop.run_in_executor(EXEC, work)
 
     asyncio.create_task(run())
-    return {"job_id": jid, "filename": file.filename}
+    return {"job_id": jid, "filename": safe_name}
 
 @app.get("/jobs/{jid}")
 def job_status(jid: str):
