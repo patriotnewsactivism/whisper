@@ -1,0 +1,77 @@
+import React, { useEffect, useState } from 'react'
+import { createRoot } from 'react-dom/client'
+import App from './App.jsx'
+import './styles.css'
+
+// Health check component to monitor API status
+function HealthIndicator() {
+  const [status, setStatus] = useState('unknown');
+  const [details, setDetails] = useState({});
+  
+  useEffect(() => {
+    // Check health on component mount
+    checkHealth();
+    
+    // Set up interval to check health every 5 minutes
+    const interval = setInterval(checkHealth, 5 * 60 * 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
+  
+  const checkHealth = async () => {
+    try {
+      const res = await fetch('/api/health');
+      if (res.ok) {
+        const data = await res.json();
+        setStatus(data.status);
+        setDetails(data.details || {});
+      } else {
+        setStatus('error');
+        setDetails({ error: `HTTP ${res.status}` });
+      }
+    } catch (err) {
+      setStatus('error');
+      setDetails({ error: err.message });
+    }
+  };
+  
+  // Generate status message
+  const getStatusMessage = () => {
+    if (status === 'healthy') {
+      return 'API is connected and working properly';
+    } else if (status === 'error') {
+      if (details.apiKeyConfigured === false) {
+        return 'API key is not configured';
+      } else if (details.apiKeyFormat === 'invalid') {
+        return 'API key has invalid format';
+      } else if (details.apiConnectivity === 'failed') {
+        return 'Cannot connect to OpenAI API';
+      } else if (details.apiConnectivity === 'error') {
+        return `API error: ${details.error?.message || 'Unknown error'}`;
+      }
+      return 'API connection error';
+    }
+    return 'Checking API status...';
+  };
+  
+  return (
+    <div 
+      className={`health-indicator ${status}`} 
+      data-status={getStatusMessage()}
+      onClick={checkHealth}
+      title="Click to check API status"
+    />
+  );
+}
+
+// Root component that includes both App and HealthIndicator
+function Root() {
+  return (
+    <>
+      <App />
+      <HealthIndicator />
+    </>
+  );
+}
+
+createRoot(document.getElementById('root')).render(<Root />)

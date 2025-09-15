@@ -1,0 +1,11 @@
+{
+  "name": "whisper-transcriber-functions",
+  "version": "1.0.0",
+  "description": "Netlify functions for Whisper Transcriber",
+  "main": "transcribe-robust.js",
+  "dependencies": {
+    "form-data": "^4.0.0",
+    "multer": "^2.0.0",
+    "node-fetch": "^2.6.12"
+  }
+}
