@@ -1,8 +1,30 @@
+[build]
+  command = "npm run build"
+  publish = "client/dist"
+
 [functions]
   node_bundler = "esbuild"
-  external_node_modules = []
+  external_node_modules = ["multer", "form-data", "node-fetch"]
   included_files = []
+  # Increase timeout for audio processing
+  timeout = 30
 
-[[edge_functions]]
-  path = "/api/transcribe"
-  function = "transcribe"
+# Define the transcribe function
+[[redirects]]
+  from = "/api/transcribe"
+  to = "/.netlify/functions/transcribe-robust"
+  status = 200
+  force = true
+
+# Health check endpoint
+[[redirects]]
+  from = "/api/health"
+  to = "/.netlify/functions/health-check"
+  status = 200
+  force = true
+
+# Fallback for client-side routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
