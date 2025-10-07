@@ -1,180 +1,272 @@
-# Whisper Transcriber
+# 🎙️ Enhanced Multi-Service Transcription App
 
-A powerful and accurate speech-to-text transcription tool using OpenAI's Whisper API.
-=======
-# Enhanced Whisper Transcriber App
+A comprehensive transcription application that integrates multiple AI services including ElevateAI, AssemblyAI, OpenAI Whisper, YouTube transcript extraction, live audio recording, and AI chat bot capabilities.
 
-A powerful and accurate speech-to-text transcription tool using OpenAI's Whisper API with client-side processing capabilities.
+## ✨ Features
 
-## Features
+### 🎯 Core Transcription Services
+- **ElevateAI Integration** - High-quality transcription with speaker diarization
+- **AssemblyAI** - Fast and accurate speech-to-text
+- **OpenAI Whisper** - State-of-the-art multilingual transcription
+- **YouTube Transcripts** - Extract transcripts from any YouTube video
+- **Intelligent Service Selection** - Automatically chooses the best service based on file size and type
 
-- Modern, responsive web interface with animated gradient background
-- Drag and drop file upload support
-- Language selection for transcription
-- Custom prompt support for specialized vocabulary
-- Real-time progress logging
-- Multiple output formats:
-  - Plain text (.txt)
-  - SubRip subtitles (.srt)
-  - WebVTT subtitles (.vtt)
-  - JSON format (.json)
-  - CSV format (.csv)
-- Copy to clipboard functionality
-- Server-side processing using OpenAI Whisper API
-- Client-side processing using @xenova/transformers library
-- Retry mechanisms for API calls
-- Error handling and logging
+### 🎤 Live Recording Features
+- **Real-time Audio Recording** - Record audio directly in the browser
+- **Live Transcription** - Get transcriptions as you record
+- **Session Management** - Track and manage multiple recording sessions
+- **Cloud Storage** - Optional S3 integration for storing recordings
 
-## Netlify Deployment
+### 🤖 AI Chat Bot
+- **Multi-Provider Support** - OpenAI GPT-4, Anthropic Claude, Google Gemini
+- **Context-Aware** - Maintains conversation context
+- **Smart Routing** - Automatically selects the best AI service
+- **Transcription Integration** - Chat about your transcriptions
 
-To deploy the client on Netlify, use the following settings:
+## 🚀 Quick Start
 
-```
-Build command: npm --prefix client ci && npm --prefix client run build
-Publish directory: client/dist
-```
+### Prerequisites
+- Node.js 18+ and npm
+- API keys for the services you want to use
 
-Netlify will use `package.json` to run the build script for the Vite based client.
-=======
-Netlify will use `requirements.txt` to install the Python dependencies and
-`package.json` to run the build script for the Vite-based client.
+### Installation
 
-### Environment Variables
-
-Set the following environment variable in your Netlify dashboard:
-
-For client-side processing, the app uses @xenova/transformers library which implements the Whisper model directly in the browser using WebAssembly.
-
-## API Endpoint
-
-- `POST /api/transcribe` - Transcribe audio to text in the specified language
-
-## Environment Variables
-
-Set the following environment variable in your Netlify dashboard:
-
-- `OPENAI_API_KEY` - Your OpenAI API key for server-side transcription
-
-## Usage
-
-1. Upload an audio or video file using drag & drop or the file browser
-2. Select the language for transcription
-3. Optionally add a custom prompt for specialized vocabulary or style guidance
-4. Click the "Transcribe" button
-5. Download results in your preferred format
-
-## Supported File Formats
-
-- Audio: MP3, WAV, M4A, FLAC, AAC, OGG
-- Video: MP4, MOV, AVI, MKV, WEBM
-
-## Error Handling
-
-The application includes robust error handling with detailed logging and retry mechanisms to ensure reliable transcription even if temporary issues occur with the OpenAI API.
-
-## Integration
-
-To integrate with other applications, make a POST request to the `/api/transcribe` endpoint with a multipart/form-data payload containing the audio file and optional parameters.
-
-Example:
+1. **Clone the repository**
 ```bash
-curl -X POST "https://transcribe.wtpnews.org/api/transcribe" \
-  -H "Content-Type: multipart/form-data" \
-  -F "file=@audio.mp3" \
-  -F "language=en"
+git clone https://github.com/patriotnewsactivism/whisper.git
+cd whisper
 ```
 
-## Accuracy
+2. **Install dependencies**
+```bash
+# Install root dependencies
+npm install
 
-OpenAI's Whisper API is considered one of the most accurate speech-to-text transcription services available. It performs well on a variety of audio conditions and supports multiple languages with high accuracy.
-=======
-- `OPENAI_API_KEY` - Your OpenAI API key for server-side transcription
+# Install server dependencies
+npm run server:install
 
-## How It Works
+# Install client dependencies
+cd client && npm install && cd ..
+```
 
-The application uses both server-side and client-side processing for maximum flexibility:
+3. **Configure environment variables**
+```bash
+cp .env.example .env
+```
 
-1. **Server-side processing**: When you upload a file, it gets sent directly to OpenAI's API endpoint through a Netlify Edge Function that acts as a proxy to keep your API key secure.
+Edit `.env` and add your API keys:
+```env
+# Required for transcription services
+ELEVATEAI_API_KEY=your_elevateai_key
+ASSEMBLYAI_API_KEY=your_assemblyai_key
+OPENAI_API_KEY=your_openai_key
 
-2. **Client-side processing**: For privacy-conscious users, the app uses the @xenova/transformers library which implements the Whisper model directly in the browser using WebAssembly.
+# Required for AI bot features
+ANTHROPIC_API_KEY=your_anthropic_key
+GEMINI_API_KEY=your_gemini_key
 
-## API Endpoints
+# Optional: For cloud storage of recordings
+AWS_ACCESS_KEY_ID=your_aws_key
+AWS_SECRET_ACCESS_KEY=your_aws_secret
+S3_BUCKET_NAME=your_bucket_name
+AWS_REGION=us-east-1
 
-### Server-side Endpoints
+# Server configuration
+PORT=3001
+NODE_ENV=development
+```
 
-- `POST /api/transcribe` - Transcribe audio to text in the specified language
-- `POST /api/translate` - Translate audio to English text
+4. **Start the application**
 
-Both endpoints accept multipart/form-data with the following parameters:
-- `file` (required) - The audio file to process
-- `language` (optional) - Language code for transcription (e.g., "en", "es", "fr")
-- `response_format` (optional) - Output format ("json", "text", "srt", "vtt")
-- `temperature` (optional) - Sampling temperature (0.0 to 1.0)
-- `prompt` (optional) - Optional text to guide the model's style or continue a previous audio segment
+**Development mode** (with hot reload):
+```bash
+npm run dev:full
+```
 
-### Client-side Functionality
+This starts:
+- Backend server on `http://localhost:3001`
+- Frontend dev server on `http://localhost:5173`
 
-The client-side processing uses the @xenova/transformers library with the following models:
-- `Xenova/whisper-small.en` - Fast and accurate English-only model
-- `Xenova/whisper-base.en` - Fastest English-only model
-- `Xenova/whisper-medium.en` - More accurate but slower English-only model
+**Production mode**:
+```bash
+# Build the client
+npm run build
 
-## Output Formats
+# Start the server
+npm start
+```
 
-1. **Plain Text (.txt)** - Simple text transcription
-2. **SubRip Subtitles (.srt)** - Subtitle format with timestamps
-3. **WebVTT Subtitles (.vtt)** - Web Video Text Tracks format
-4. **JSON (.json)** - Structured data with detailed timing information
-5. **CSV (.csv)** - Comma-separated values format for easy data analysis
+## 📖 Usage Guide
 
-## Integration Capabilities
+### YouTube Transcription
+1. Navigate to the YouTube tab
+2. Paste a YouTube video URL
+3. Click "Get Transcript"
+4. View and download the transcript
 
-This application is designed to be easily integrated into other projects:
+### Audio File Transcription
+1. Go to the Audio Upload tab
+2. Select an audio file (MP3, WAV, M4A, etc.)
+3. The app automatically selects the best transcription service
+4. View results with timestamps and speaker labels
 
-1. **API Endpoints**: All functionality is available through REST API endpoints
-2. **Multiple Formats**: Support for various output formats makes integration flexible
-3. **Retry Mechanisms**: Built-in retry logic ensures reliable processing
-4. **Error Handling**: Comprehensive error handling for robust integration
+### Live Recording
+1. Click on the "Live Recording" tab
+2. Click "Start Recording" to begin
+3. Speak into your microphone
+4. Click "Stop Recording" when done
+5. Get instant transcription of your recording
 
-## Running Locally
+### AI Chat Bot
+1. Open the "AI Assistant" tab
+2. Type your question or request
+3. The bot can help with:
+   - Summarizing transcriptions
+   - Answering questions about content
+   - General conversation
+   - Content analysis
 
-1. Install dependencies:
-   ```
-   npm install
-   pip install -r server/requirements.txt
-   ```
+## 🏗️ Project Structure
 
-2. Build the client:
-   ```
-   npm --prefix client run build
-   ```
+```
+whisper/
+├── client/                 # React frontend
+│   ├── src/
+│   │   ├── App.jsx        # Main app component
+│   │   ├── App.css        # Main styles
+│   │   ├── LiveTranscriptionWithRecording.jsx
+│   │   ├── AIBotChat.jsx
+│   │   └── EnhancedFeatures.css
+│   └── package.json
+├── server/                 # Express backend
+│   ├── services/          # Service modules
+│   │   ├── elevateai-service.js
+│   │   ├── youtube-service.js
+│   │   ├── transcription-orchestrator.js
+│   │   ├── audio-recorder-service.js
+│   │   └── ai-bot-router.js
+│   ├── index.js           # Server entry point
+│   └── package.json
+├── netlify/
+│   └── functions/         # Serverless functions
+│       ├── ai-bot.js
+│       └── save-recording.js
+├── .env.example           # Environment variables template
+├── package.json           # Root package.json
+└── README.md             # This file
+```
 
-3. Start the server:
-   ```
-   npm start
-   ```
+## 🔧 API Endpoints
 
-4. Visit `http://localhost:5000` in your browser
+### Transcription Endpoints
+- `POST /api/transcribe` - Upload and transcribe audio file
+- `POST /api/youtube-transcript` - Get YouTube video transcript
+- `GET /api/health` - Check service status
 
-## Troubleshooting
+### Recording Endpoints
+- `POST /api/recording/start` - Start a recording session
+- `POST /api/recording/stop` - Stop a recording session
+- `GET /api/recording/status/:sessionId` - Get recording status
 
-If you encounter errors during transcription:
+### AI Bot Endpoint
+- `POST /api/ai-bot` - Send message to AI assistant
 
-1. Check that your OpenAI API key is correctly set in the environment variables
-2. Verify that the uploaded file is in a supported format (MP3, WAV, MP4, MOV, etc.)
-3. Ensure the file size is within OpenAI's limits (25MB for most formats)
-4. Check the progress log for specific error messages
+## 🧪 Testing
 
-## Custom Vocabulary Support
+Run service tests:
+```bash
+npm run test:services
+```
 
-To improve transcription accuracy for specific terms, you can use the prompt parameter with specialized vocabulary.
+This will verify:
+- All API keys are configured correctly
+- Services are accessible
+- Basic functionality works
 
-## Speaker Diarization
+## 📦 Deployment
 
-The application includes basic speaker diarization capabilities through the faster-whisper library, which can distinguish between different speakers in the audio.
+### Netlify Deployment
 
-## Timestamp Formatting Options
+1. **Connect your repository to Netlify**
 
-Multiple timestamp formats are supported:
-- SRT format: HH:MM:SS,mmm
-- VTT format: HH:MM:SS.mmm
+2. **Configure build settings**:
+   - Build command: `npm run build`
+   - Publish directory: `client/dist`
+
+3. **Add environment variables** in Netlify dashboard:
+   - All API keys from `.env.example`
+
+4. **Deploy**:
+```bash
+./deploy-enhanced.sh
+```
+
+### Manual Deployment
+
+1. Build the client:
+```bash
+cd client && npm run build
+```
+
+2. Deploy the `client/dist` folder to your hosting service
+
+3. Deploy the server to a Node.js hosting platform (Heroku, Railway, etc.)
+
+## 🔑 Getting API Keys
+
+### ElevateAI
+1. Visit [ElevateAI](https://elevateai.com)
+2. Sign up for an account
+3. Navigate to API settings
+4. Generate an API key
+
+### AssemblyAI
+1. Visit [AssemblyAI](https://www.assemblyai.com)
+2. Create an account
+3. Go to your dashboard
+4. Copy your API key
+
+### OpenAI
+1. Visit [OpenAI Platform](https://platform.openai.com)
+2. Sign up or log in
+3. Go to API keys section
+4. Create a new API key
+
+### Anthropic (Claude)
+1. Visit [Anthropic](https://www.anthropic.com)
+2. Request API access
+3. Once approved, get your API key from the console
+
+### Google Gemini
+1. Visit [Google AI Studio](https://makersuite.google.com)
+2. Sign in with your Google account
+3. Create an API key
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 📄 License
+
+MIT License - see LICENSE file for details
+
+## 🆘 Support
+
+For issues and questions:
+1. Check the [documentation](./NEW_FEATURES_GUIDE.md)
+2. Review [deployment guide](./DEPLOYMENT_SUMMARY.md)
+3. Check [what's still needed](./WHATS_STILL_NEEDED.md)
+4. Open an issue on GitHub
+
+## 🎉 Acknowledgments
+
+- ElevateAI for transcription services
+- AssemblyAI for speech-to-text
+- OpenAI for Whisper and GPT models
+- Anthropic for Claude
+- Google for Gemini
+- YouTube for transcript API
+
+---
+
+**Version 2.0.0** - Enhanced with live recording and AI bot capabilities
