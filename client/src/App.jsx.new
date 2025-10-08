@@ -45,6 +45,15 @@ function download(name, text) {
   URL.revokeObjectURL(url)
 }
 
+// Format file size in human-readable format
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
 export default function App() {
   const [file, setFile] = useState(null)
   const [status, setStatus] = useState('idle')
@@ -52,9 +61,16 @@ export default function App() {
   const [text, setText] = useState('')
   const [segs, setSegs] = useState([])
   const [language, setLanguage] = useState('en')
-  const [prompt, setPrompt] = useState('') // New state for custom prompt
+  const [prompt, setPrompt] = useState('') 
+  const [errorDetails, setErrorDetails] = useState(null)
+  const [retryCount, setRetryCount] = useState(0)
   const fileInputRef = useRef(null)
   const logContainerRef = useRef(null)
+
+  // Constants for validation
+  const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB (OpenAI limit)
+  const ALLOWED_TYPES = ['audio/', 'video/'];
+  const MAX_RETRIES = 3;
 
   // Scroll to bottom of log when new entries are added
   useEffect(() => {
@@ -89,17 +105,36 @@ export default function App() {
     
     const files = e.dataTransfer.files
     if (files.length > 0) {
-      const selectedFile = files[0]
-      if (selectedFile.type.startsWith('audio/') || selectedFile.type.startsWith('video/')) {
-        setFile(selectedFile)
-      } else {
-        setStatus('error')
-        setLog(prev => [...prev, 'Error: Please upload an audio or video file'])
-      }
+      validateAndSetFile(files[0])
     }
   }
 
-  // Transcribe function using OpenAI API
+  // Validate file before setting
+  const validateAndSetFile = (selectedFile) => {
+    // Reset error state
+    setErrorDetails(null)
+    
+    // Check file type
+    const isAllowedType = ALLOWED_TYPES.some(type => selectedFile.type.startsWith(type))
+    if (!isAllowedType) {
+      setStatus('error')
+      setLog(prev => [...prev, `Error: File type "${selectedFile.type}" is not supported. Please upload an audio or video file.`])
+      return
+    }
+    
+    // Check file size
+    if (selectedFile.size > MAX_FILE_SIZE) {
+      setStatus('error')
+      setLog(prev => [...prev, `Error: File size (${formatFileSize(selectedFile.size)}) exceeds the maximum allowed size of ${formatFileSize(MAX_FILE_SIZE)}.`])
+      return
+    }
+    
+    // File is valid
+    setFile(selectedFile)
+    setLog(prev => [...prev, `File selected: ${selectedFile.name} (${formatFileSize(selectedFile.size)})`])
+  }
+
+  // Transcribe function with enhanced error handling and retry logic
   async function transcribe() {
     if (!file) return
     
@@ -107,6 +142,7 @@ export default function App() {
     setLog([])
     setText('')
     setSegs([])
+    setErrorDetails(null)
     
     try {
       const fd = new FormData()
@@ -120,23 +156,51 @@ export default function App() {
         fd.append("prompt", prompt)
       }
       
-      setLog(prev => [...prev, 'Uploading file to server...'])
+      setLog(prev => [...prev, `Uploading file: ${file.name} (${formatFileSize(file.size)})...`])
       
+      const startTime = Date.now()
       const res = await fetch("/api/transcribe", {
         method: "POST",
         body: fd
       })
+      const endTime = Date.now()
+      const requestTime = ((endTime - startTime) / 1000).toFixed(1)
       
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`)
+        // Try to get more detailed error information
+        let errorText = await res.text()
+        let errorJson
+        
+        try {
+          errorJson = JSON.parse(errorText)
+        } catch (e) {
+          // If not JSON, use text as is
+          errorJson = { error: `HTTP ${res.status}: ${res.statusText}`, details: errorText }
+        }
+        
+        throw new Error(errorJson.error || `HTTP ${res.status}: ${res.statusText}`, { 
+          cause: { 
+            status: res.status, 
+            details: errorJson.details || errorText 
+          }
+        })
       }
       
-      setLog(prev => [...prev, 'Processing transcription...'])
+      setLog(prev => [...prev, `Server response received in ${requestTime}s, processing...`])
       
-      const data = await res.json()
+      let data
+      try {
+        data = await res.json()
+      } catch (err) {
+        throw new Error(`Failed to parse server response: ${err.message}`, { 
+          cause: { details: "The server returned an invalid JSON response. This might indicate a server error or timeout." } 
+        })
+      }
       
       if (data.error) {
-        throw new Error(data.error.message || data.error)
+        throw new Error(data.error.message || data.error, { 
+          cause: { details: data.details || "No additional details provided" } 
+        })
       }
       
       setText(data.text || "")
@@ -150,11 +214,37 @@ export default function App() {
       
       setSegs(chunks)
       setStatus('done')
-      setLog(prev => [...prev, 'Transcription completed successfully!'])
+      setLog(prev => [...prev, `Transcription completed successfully! (${data.text?.length || 0} characters)`])
+      
+      // Reset retry count on success
+      setRetryCount(0)
     } catch (err) {
       setStatus('error')
-      setLog(prev => [...prev, `Error: ${err.message}`])
+      
+      // Extract detailed error information if available
+      const errorMessage = err.message || "Unknown error occurred"
+      const errorDetails = err.cause?.details || "No additional details available"
+      
+      setLog(prev => [...prev, `Error: ${errorMessage}`])
+      setErrorDetails(errorDetails)
       console.error('Transcription error:', err)
+      
+      // Implement retry logic for certain errors
+      if (retryCount < MAX_RETRIES && 
+          (err.cause?.status === 500 || err.cause?.status === 503 || err.message.includes('timeout'))) {
+        
+        const nextRetry = retryCount + 1
+        setRetryCount(nextRetry)
+        
+        const delay = Math.pow(2, nextRetry) * 1000 // Exponential backoff
+        
+        setLog(prev => [...prev, `Retrying in ${delay/1000} seconds... (Attempt ${nextRetry} of ${MAX_RETRIES})`])
+        
+        setTimeout(() => {
+          setLog(prev => [...prev, `Retrying transcription...`])
+          transcribe()
+        }, delay)
+      }
     }
   }
 
@@ -180,7 +270,10 @@ export default function App() {
           >
             <div className="file-icon">📁</div>
             <p className="upload-text">Drag & drop your audio or video file here</p>
-            <p className="upload-hint">Supports MP3, WAV, MP4, MOV, AVI and other formats</p>
+            <p className="upload-hint">
+              Supports MP3, WAV, MP4, MOV, AVI and other formats<br/>
+              Maximum file size: {formatFileSize(MAX_FILE_SIZE)}
+            </p>
             <button 
               className="upload-button" 
               onClick={() => fileInputRef.current?.click()}
@@ -192,9 +285,9 @@ export default function App() {
               ref={fileInputRef}
               className="file-input"
               accept="audio/*,video/*"
-              onChange={e => setFile(e.target.files?.[0] || null)}
+              onChange={e => e.target.files?.[0] && validateAndSetFile(e.target.files[0])}
             />
-            {file && <p className="file-name">Selected: {file.name}</p>}
+            {file && <p className="file-name">Selected: {file.name} ({formatFileSize(file.size)})</p>}
           </div>
         </div>
         
@@ -259,6 +352,13 @@ export default function App() {
                 [{new Date().toLocaleTimeString()}] {l}
               </div>
             ))}
+            
+            {errorDetails && (
+              <div className="error-details">
+                <h4>Error Details:</h4>
+                <pre>{typeof errorDetails === 'string' ? errorDetails : JSON.stringify(errorDetails, null, 2)}</pre>
+              </div>
+            )}
           </div>
         </div>
         
