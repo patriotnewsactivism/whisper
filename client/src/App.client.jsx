@@ -52,9 +52,27 @@ export default function App() {
   const [text, setText] = useState('')
   const [segs, setSegs] = useState([])
   const [language, setLanguage] = useState('en')
-  const [prompt, setPrompt] = useState('') // New state for custom prompt
+  const [prompt, setPrompt] = useState('') // Custom prompt
+  const [apiKey, setApiKey] = useState('') // New state for API key
+  const [apiKeyVisible, setApiKeyVisible] = useState(false) // Toggle API key visibility
+  const [useClientSide, setUseClientSide] = useState(true) // Default to client-side
   const fileInputRef = useRef(null)
   const logContainerRef = useRef(null)
+
+  // Load API key from localStorage if available
+  useEffect(() => {
+    const savedApiKey = localStorage.getItem('openai_api_key')
+    if (savedApiKey) {
+      setApiKey(savedApiKey)
+    }
+  }, [])
+
+  // Save API key to localStorage when changed
+  useEffect(() => {
+    if (apiKey) {
+      localStorage.setItem('openai_api_key', apiKey)
+    }
+  }, [apiKey])
 
   // Scroll to bottom of log when new entries are added
   useEffect(() => {
@@ -99,9 +117,21 @@ export default function App() {
     }
   }
 
+  // Validate API key format
+  const isValidApiKey = (key) => {
+    return key && key.trim() !== '' && key.startsWith('sk-')
+  }
+
   // Transcribe function using OpenAI API
   async function transcribe() {
     if (!file) return
+    
+    // Check if API key is valid when using client-side
+    if (useClientSide && !isValidApiKey(apiKey)) {
+      setStatus('error')
+      setLog(prev => [...prev, 'Error: Please enter a valid OpenAI API key (starts with sk-)'])
+      return
+    }
     
     setStatus('processing')
     setLog([])
@@ -120,20 +150,48 @@ export default function App() {
         fd.append("prompt", prompt)
       }
       
-      setLog(prev => [...prev, 'Uploading file to server...'])
+      setLog(prev => [...prev, 'Preparing transcription request...'])
       
-      const res = await fetch("/api/transcribe", {
-        method: "POST",
-        body: fd
-      })
+      let response
       
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`)
+      if (useClientSide) {
+        // Client-side direct to OpenAI API
+        setLog(prev => [...prev, 'Using client-side API call (direct to OpenAI)'])
+        
+        response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${apiKey}`
+            // No Content-Type header - FormData sets it with boundary
+          },
+          body: fd
+        })
+      } else {
+        // Server-side via our API
+        setLog(prev => [...prev, 'Using server-side API call'])
+        
+        response = await fetch("/api/transcribe", {
+          method: "POST",
+          body: fd
+        })
       }
       
-      setLog(prev => [...prev, 'Processing transcription...'])
+      if (!response.ok) {
+        // Try to get error details from response
+        let errorDetails = ''
+        try {
+          const errorData = await response.json()
+          errorDetails = errorData.error || errorData.message || `HTTP ${response.status}`
+        } catch (e) {
+          errorDetails = `HTTP ${response.status}: ${response.statusText}`
+        }
+        
+        throw new Error(`Transcription failed: ${errorDetails}`)
+      }
       
-      const data = await res.json()
+      setLog(prev => [...prev, 'Processing transcription response...'])
+      
+      const data = await response.json()
       
       if (data.error) {
         throw new Error(data.error.message || data.error)
@@ -200,6 +258,57 @@ export default function App() {
         
         <div className="options-section">
           <h2 className="section-title">Transcription Options</h2>
+          
+          {/* API Mode Selection */}
+          <div className="option-group api-mode-selector">
+            <label className="option-label">API Mode</label>
+            <div className="radio-group">
+              <label className="radio-label">
+                <input 
+                  type="radio" 
+                  name="apiMode" 
+                  checked={useClientSide} 
+                  onChange={() => setUseClientSide(true)}
+                />
+                Client-side (direct to OpenAI)
+              </label>
+              <label className="radio-label">
+                <input 
+                  type="radio" 
+                  name="apiMode" 
+                  checked={!useClientSide} 
+                  onChange={() => setUseClientSide(false)}
+                />
+                Server-side (via our API)
+              </label>
+            </div>
+          </div>
+          
+          {/* API Key Input (only shown for client-side mode) */}
+          {useClientSide && (
+            <div className="option-group api-key-input">
+              <label className="option-label">OpenAI API Key</label>
+              <div className="api-key-container">
+                <input
+                  type={apiKeyVisible ? "text" : "password"}
+                  value={apiKey}
+                  onChange={e => setApiKey(e.target.value)}
+                  className="option-input"
+                  placeholder="Enter your OpenAI API key (starts with sk-)"
+                />
+                <button 
+                  className="toggle-visibility-button"
+                  onClick={() => setApiKeyVisible(!apiKeyVisible)}
+                >
+                  {apiKeyVisible ? "Hide" : "Show"}
+                </button>
+              </div>
+              <p className="api-key-info">
+                Your API key is stored locally in your browser and sent directly to OpenAI.
+              </p>
+            </div>
+          )}
+          
           <div className="options-grid">
             <div className="option-group">
               <label className="option-label">Language</label>
@@ -239,7 +348,7 @@ export default function App() {
           <button 
             className="transcribe-button" 
             onClick={transcribe} 
-            disabled={!file || status === 'processing'}
+            disabled={!file || status === 'processing' || (useClientSide && !isValidApiKey(apiKey))}
           >
             {status === 'processing' ? 'Processing...' : 'Transcribe'}
           </button>
