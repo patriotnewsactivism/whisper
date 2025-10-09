@@ -80,7 +80,7 @@ const EnhancedTranscription = () => {
           setLoading(false);
           return;
         }
-        requestUrl = `${API_BASE_URL}/transcribe`;
+        requestUrl = `${API_BASE_URL}/transcribe-working`;
         requestBody = {
           service: 'youtube',
           url: url
@@ -94,7 +94,7 @@ const EnhancedTranscription = () => {
           return;
         }
         
-        requestUrl = `${API_BASE_URL}/transcribe`;
+        requestUrl = `${API_BASE_URL}/transcribe-working`;
         requestBody = {
           service: selectedService,
           fileUrl: fileUrlToUse,
