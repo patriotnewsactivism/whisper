@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import './EnhancedFeatures.css';
+import './styles.css';
 
 const API_BASE_URL = '/.netlify/functions';
 

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import './App.css';
+import './styles.css';
 import EnhancedTranscription from './EnhancedTranscription';
 import LiveTranscriptionWithRecording from './LiveTranscriptionWithRecording';
 import AIBotChat from './AIBotChat';
