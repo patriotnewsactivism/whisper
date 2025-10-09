@@ -8,8 +8,13 @@
   node_bundler = "esbuild"
 
 [[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
+  from = "/api/transcribe-youtube"
+  to = "/.netlify/functions/transcribe-youtube"
+  status = 200
+
+[[redirects]]
+  from = "/api/transcribe-upload"
+  to = "/.netlify/functions/transcribe-upload"
   status = 200
 
 [[redirects]]
