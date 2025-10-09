@@ -1,0 +1,12 @@
+# Override Netlify configuration for client directory
+[build]
+  command = "npx vite build"
+  publish = "dist"
+
+# Explicitly disable Next.js plugin
+[build.environment]
+  NETLIFY_NEXT_PLUGIN_SKIP = "true"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
