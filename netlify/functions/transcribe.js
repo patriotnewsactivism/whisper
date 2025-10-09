@@ -167,6 +167,8 @@ async function handleYouTubeTranscription(event) {
     throw new Error('url is required for YouTube transcription');
   }
 
+  console.log('Calling YouTube service for URL:', url);
   const result = await youtubeService.getTranscript(url);
+  console.log('YouTube service result:', result);
   return result;
 }
