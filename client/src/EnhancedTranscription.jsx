@@ -33,7 +33,7 @@ const EnhancedTranscription = () => {
       reader.onload = async (e) => {
         const base64 = e.target.result.split(',')[1];
         
-        const response = await fetch(`${API_BASE_URL}/upload`, {
+        const response = await fetch(`${API_BASE_URL}/upload-simple`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

@@ -5,6 +5,7 @@
 
 const axios = require('axios');
 const { YoutubeTranscript } = require('youtube-transcript');
+const fallbackService = require('./youtube-service-fallback');
 
 class YouTubeService {
   constructor() {
@@ -65,6 +66,9 @@ class YouTubeService {
    * @returns {Promise<Object>} - Transcript result
    */
   async getTranscript(url, language = null) {
+    console.log('Attempting YouTube transcript extraction for:', url);
+
+    // Method 1: Try original youtube-transcript library
     try {
       const videoId = this.extractVideoId(url);
       
@@ -101,23 +105,27 @@ class YouTubeService {
       };
 
     } catch (error) {
-      console.error('YouTube transcript error:', error);
+      console.error('youtube-transcript library failed:', error.message);
       
-      // Handle specific error cases
-      let errorMessage = 'Failed to extract transcript';
+      // Method 2: Use fallback service
+      console.log('Trying fallback service...');
+      const fallbackResult = await fallbackService.getTranscript(url, { language: language || 'en' });
       
-      if (error.message.includes('transcript is disabled')) {
-        errorMessage = 'Transcript is disabled for this video';
-      } else if (error.message.includes('not available')) {
-        errorMessage = 'No transcript available for this video';
-      } else if (error.message.includes('Invalid YouTube URL')) {
-        errorMessage = 'Please provide a valid YouTube URL';
+      if (fallbackResult.success) {
+        return fallbackResult;
       }
 
+      // Return fallback error with suggestions
       return {
         success: false,
-        error: errorMessage,
-        service: 'youtube'
+        error: 'Unable to extract transcript from this YouTube video. The video may not have captions available, or they may be disabled.',
+        service: 'youtube',
+        suggestions: [
+          'Try a different YouTube video',
+          'Check if the video has closed captions enabled',
+          'Ensure the video is publicly accessible',
+          'Try using a shorter video for testing'
+        ]
       };
     }
   }
@@ -218,4 +226,4 @@ class YouTubeService {
   }
 }
 
-module.exports = YouTubeService;
+module.exports = new YouTubeService();

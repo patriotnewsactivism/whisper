@@ -8,6 +8,14 @@ const assemblyaiService = require('../../server/services/assemblyai-service');
 const elevateaiService = require('../../server/services/elevateai-service');
 const youtubeService = require('../../server/services/youtube-service');
 
+// Check if services are properly configured
+const SERVICES_STATUS = {
+  whisper: !!process.env.OPENAI_API_KEY,
+  assemblyai: !!process.env.ASSEMBLYAI_API_KEY,
+  elevateai: !!process.env.ELEVATEAI_API_KEY,
+  youtube: true // Always available, but may have limitations
+};
+
 // Initialize Supabase
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -49,6 +57,18 @@ exports.handler = async (event, context) => {
         statusCode: 400,
         headers: corsHeaders,
         body: JSON.stringify({ error: 'Service parameter is required' })
+      };
+    }
+
+    // Check if service is configured
+    if (!SERVICES_STATUS[service.toLowerCase()]) {
+      return {
+        statusCode: 400,
+        headers: corsHeaders,
+        body: JSON.stringify({ 
+          error: `${service} service is not configured. Please check your environment variables.`,
+          configuredServices: Object.keys(SERVICES_STATUS).filter(key => SERVICES_STATUS[key])
+        })
       };
     }
 
