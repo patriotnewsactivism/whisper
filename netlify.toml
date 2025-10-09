@@ -1,9 +1,18 @@
-[functions]
-  external_node_modules = ["your-modules-here"]
-
 [build]
-  functions = "netlify/functions"
+  base = "client"
+  command = "npx vite build"
+  publish = "dist"
 
-# Set timeout at the build level
-[functions."*"]
-  timeout = 30
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
