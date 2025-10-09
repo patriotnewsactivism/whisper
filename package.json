@@ -4,7 +4,7 @@
   "version": "2.0.0",
   "type": "commonjs",
   "scripts": {
-    "build": "cd client && npm install && npx vite build",
+    "build": "cd client && npm install && chmod +x ./node_modules/.bin/* && npx vite build",
     "start": "node server/index.js",
     "dev": "nodemon server/index.js",
     "client": "cd client && npm run dev",
