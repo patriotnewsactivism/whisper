@@ -86,48 +86,55 @@ class YouTubeService {
         lang: language || 'en'
       });
 
-      // Format transcript
-      const fullText = transcriptData.map(item => item.text).join(' ');
-      const segments = transcriptData.map(item => ({
-        text: item.text,
-        start: item.offset,
-        duration: item.duration
-      }));
+      console.log('youtube-transcript returned:', transcriptData.length, 'segments');
 
-      return {
-        success: true,
-        transcript: fullText,
-        segments: segments,
-        service: 'youtube',
-        videoId: videoId,
-        metadata: metadata,
-        language: language || 'en'
-      };
+      // Format transcript
+      if (transcriptData && transcriptData.length > 0) {
+        const fullText = transcriptData.map(item => item.text).join(' ');
+        const segments = transcriptData.map(item => ({
+          text: item.text,
+          start: item.offset,
+          duration: item.duration
+        }));
+
+        return {
+          success: true,
+          text: fullText,
+          segments: segments,
+          service: 'youtube',
+          videoId: videoId,
+          metadata: metadata,
+          language: language || 'en'
+        };
+      } else {
+        console.log('youtube-transcript returned empty data, using fallback');
+      }
 
     } catch (error) {
       console.error('youtube-transcript library failed:', error.message);
-      
-      // Method 2: Use fallback service
-      console.log('Trying fallback service...');
-      const fallbackResult = await fallbackService.getTranscript(url, { language: language || 'en' });
-      
-      if (fallbackResult.success) {
-        return fallbackResult;
-      }
-
-      // Return fallback error with suggestions
-      return {
-        success: false,
-        error: 'Unable to extract transcript from this YouTube video. The video may not have captions available, or they may be disabled.',
-        service: 'youtube',
-        suggestions: [
-          'Try a different YouTube video',
-          'Check if the video has closed captions enabled',
-          'Ensure the video is publicly accessible',
-          'Try using a shorter video for testing'
-        ]
-      };
     }
+
+    // Method 2: Always use fallback service for reliable results
+    console.log('Using fallback service for reliable YouTube transcription...');
+    const fallbackResult = await fallbackService.getTranscript(url, { language: language || 'en' });
+    
+    if (fallbackResult.success) {
+      return fallbackResult;
+    }
+
+    // Final fallback
+    return {
+      success: false,
+      error: 'Unable to extract transcript from this YouTube video. The video may not have captions available, or they may be disabled.',
+      service: 'youtube',
+      suggestions: [
+        'Try a different YouTube video',
+        'Check if the video has closed captions enabled',
+        'Ensure the video is publicly accessible',
+        'Try using a shorter video for testing',
+        'Upload your own audio file instead'
+      ]
+    };
   }
 
   /**
