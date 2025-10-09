@@ -5,12 +5,25 @@ const path = require('path');
 const fs = require('fs').promises;
 require('dotenv').config();
 
+// Import database
+const { testConnection, initializeSchema } = require('./db/connection');
+
 // Import services
 const { transcribeWithElevateAI } = require('./services/elevateai-service');
 const { getYouTubeTranscript } = require('./services/youtube-service');
 const { selectTranscriptionService } = require('./services/transcription-orchestrator');
 const { startRecording, stopRecording, getRecordingStatus } = require('./services/audio-recorder-service');
 const { routeAIRequest } = require('./services/ai-bot-router');
+const { initializeUsage, trackTranscription } = require('./services/usage-service');
+
+// Import routes
+const authRoutes = require('./routes/auth');
+const billingRoutes = require('./routes/billing');
+const usageRoutes = require('./routes/usage');
+
+// Import middleware
+const { authenticate } = require('./middleware/auth');
+const { checkUsageLimit, requireFeature } = require('./middleware/subscription');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -18,6 +31,18 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Initialize database on startup
+(async () => {
+  console.log('🔄 Initializing database...');
+  const connected = await testConnection();
+  if (connected) {
+    await initializeSchema();
+    console.log('✅ Database ready');
+  } else {
+    console.log('⚠️  Database not connected - running without persistence');
+  }
+})();
 
 // Configure multer for file uploads
 const upload = multer({
@@ -27,12 +52,19 @@ const upload = multer({
   }
 });
 
+// API Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/billing', billingRoutes);
+app.use('/api/usage', usageRoutes);
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
     services: {
+      database: !!process.env.DATABASE_URL,
+      stripe: !!process.env.STRIPE_SECRET_KEY,
       elevateai: !!process.env.ELEVATEAI_API_KEY,
       assemblyai: !!process.env.ASSEMBLYAI_API_KEY,
       openai: !!process.env.OPENAI_API_KEY,
@@ -61,8 +93,12 @@ app.post('/api/youtube-transcript', async (req, res) => {
   }
 });
 
-// Audio file transcription endpoint
-app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
+// Audio file transcription endpoint (protected with usage check)
+app.post('/api/transcribe', 
+  authenticate,
+  checkUsageLimit('transcriptionMinutes', 1),
+  upload.single('audio'), 
+  async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No audio file provided' });
@@ -95,12 +131,17 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
         throw new Error('No suitable transcription service available');
     }
 
+    // Track usage
+    const durationMinutes = Math.ceil(fileSize / (1024 * 1024 * 2)); // Rough estimate
+    trackTranscription(req.user.userId, durationMinutes);
+
     // Clean up uploaded file
     await fs.unlink(filePath);
 
     res.json({ 
       transcription,
-      service: selectedService 
+      service: selectedService,
+      minutesUsed: durationMinutes
     });
   } catch (error) {
     console.error('Transcription error:', error);
@@ -164,8 +205,11 @@ app.get('/api/recording/status/:sessionId', async (req, res) => {
   }
 });
 
-// AI Bot endpoint
-app.post('/api/ai-bot', async (req, res) => {
+// AI Bot endpoint (protected with feature check)
+app.post('/api/ai-bot',
+  authenticate,
+  requireFeature('advancedFeatures'),
+  async (req, res) => {
   try {
     const { message, context, preferredService } = req.body;
     
