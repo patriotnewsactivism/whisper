@@ -300,27 +300,4 @@ class TranscriptionOrchestrator {
   }
 }
 
-// Mock services for testing (remove in production)
-class AssemblyAIService {
-  async transcribe(filePath, options = {}) {
-    // Mock implementation - replace with actual AssemblyAI SDK
-    return {
-      success: true,
-      transcript: 'Mock AssemblyAI transcript for file: ' + filePath,
-      service: 'assemblyai'
-    };
-  }
-}
-
-class WhisperService {
-  async transcribe(filePath, options = {}) {
-    // Mock implementation - replace with actual OpenAI SDK
-    return {
-      success: true,
-      transcript: 'Mock Whisper transcript for file: ' + filePath,
-      service: 'whisper'
-    };
-  }
-}
-
 module.exports = TranscriptionOrchestrator;

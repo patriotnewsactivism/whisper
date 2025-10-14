@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import './styles.css';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 function App() {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
@@ -19,7 +21,7 @@ function App() {
     setTranscript('');
 
     try {
-      const response = await fetch('/.netlify/functions/transcribe-youtube', {
+      const response = await fetch(`${API_URL}/api/youtube-transcript`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -45,7 +47,7 @@ function App() {
         throw new Error('Invalid JSON response from server');
       }
       
-      if (data.success) {
+      if (data.transcript) {
         setTranscript(data.transcript);
       } else {
         setError(data.error || 'Failed to transcribe YouTube video');
@@ -69,63 +71,29 @@ function App() {
     setTranscript('');
 
     try {
-      const fileReader = new FileReader();
-      fileReader.onload = async (e) => {
-        try {
-          const base64File = e.target.result.split(',')[1];
-          
-          const response = await fetch('/.netlify/functions/transcribe-upload', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              file: base64File,
-              fileName: selectedFile.name,
-              fileType: selectedFile.type
-            })
-          });
+      const formData = new FormData();
+      formData.append('audio', selectedFile);
 
-          // Check if response is ok
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
+      const response = await fetch(`${API_URL}/api/transcribe`, {
+        method: 'POST',
+        body: formData
+      });
 
-          // Get response text first to debug
-          const text = await response.text();
-          console.log('Response text:', text);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
-          // Try to parse JSON
-          let data;
-          try {
-            data = JSON.parse(text);
-          } catch (parseError) {
-            console.error('JSON parse error:', parseError);
-            throw new Error('Invalid JSON response from server');
-          }
-          
-          if (data.success) {
-            setTranscript(data.transcript);
-          } else {
-            setError(data.error || 'Failed to transcribe file');
-          }
-        } catch (err) {
-          console.error('File transcription error:', err);
-          setError('Error: ' + err.message);
-        } finally {
-          setLoading(false);
-        }
-      };
+      const data = await response.json();
       
-      fileReader.onerror = () => {
-        setError('Error reading file');
-        setLoading(false);
-      };
-      
-      fileReader.readAsDataURL(selectedFile);
+      if (data.transcription) {
+        setTranscript(typeof data.transcription === 'string' ? data.transcription : JSON.stringify(data.transcription, null, 2));
+      } else {
+        setError(data.error || 'Failed to transcribe file');
+      }
     } catch (err) {
-      console.error('File processing error:', err);
-      setError('Error processing file: ' + err.message);
+      console.error('File transcription error:', err);
+      setError('Error: ' + err.message);
+    } finally {
       setLoading(false);
     }
   };

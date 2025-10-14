@@ -1,4 +1,4 @@
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 
 /**
  * Stripe Service - Handle all Stripe-related operations
@@ -75,6 +75,9 @@ const PLANS = {
  * Create a new Stripe customer
  */
 async function createCustomer(email, name, metadata = {}) {
+  if (!stripe) {
+    throw new Error('Stripe is not configured');
+  }
   try {
     const customer = await stripe.customers.create({
       email,
@@ -271,7 +274,10 @@ function verifyWebhookSignature(payload, signature, secret) {
  * Get plan details by plan ID
  */
 function getPlanDetails(planId) {
-  return PLANS[planId] || PLANS.free;
+  if (!planId || !PLANS[planId]) {
+    return PLANS.free;
+  }
+  return PLANS[planId];
 }
 
 /**
