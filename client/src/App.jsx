@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import './styles.css';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+// If VITE_API_URL is provided, we use the Node server (dev/self-hosted).
+// Otherwise, we assume Netlify Functions via redirects under /api/*.
+const API_URL = import.meta.env.VITE_API_URL || '';
+const USE_NODE_SERVER = Boolean(import.meta.env.VITE_API_URL);
 
 function App() {
   const [youtubeUrl, setYoutubeUrl] = useState('');
@@ -21,11 +24,12 @@ function App() {
     setTranscript('');
 
     try {
-      const response = await fetch(`${API_URL}/api/youtube-transcript`, {
+      const endpoint = USE_NODE_SERVER
+        ? `${API_URL}/api/youtube-transcript`
+        : `/api/transcribe-youtube`;
+      const response = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: youtubeUrl })
       });
 
@@ -34,21 +38,13 @@ function App() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // Get response text first to debug
-      const text = await response.text();
-      console.log('Response text:', text);
-
-      // Try to parse JSON
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (parseError) {
-        console.error('JSON parse error:', parseError);
-        throw new Error('Invalid JSON response from server');
-      }
+      const data = await response.json();
       
-      if (data.transcript) {
-        setTranscript(data.transcript);
+      // Netlify function returns { success, transcript, metadata }
+      // Node server returns { transcript }
+      const t = data.transcript || data?.result?.text;
+      if (t) {
+        setTranscript(typeof t === 'string' ? t : JSON.stringify(t, null, 2));
       } else {
         setError(data.error || 'Failed to transcribe YouTube video');
       }
@@ -71,22 +67,50 @@ function App() {
     setTranscript('');
 
     try {
-      const formData = new FormData();
-      formData.append('audio', selectedFile);
+      let data;
+      if (USE_NODE_SERVER) {
+        const formData = new FormData();
+        formData.append('audio', selectedFile);
+        const response = await fetch(`${API_URL}/api/transcribe`, {
+          method: 'POST',
+          body: formData
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        data = await response.json();
+      } else {
+        // Netlify Functions path: use base64 JSON to /api/transcribe-upload (redirects to function)
+        const fileBase64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result || '';
+            const commaIdx = String(result).indexOf(',');
+            resolve(commaIdx >= 0 ? String(result).slice(commaIdx + 1) : String(result));
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(selectedFile);
+        });
 
-      const response = await fetch(`${API_URL}/api/transcribe`, {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const response = await fetch(`/api/transcribe-upload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            file: fileBase64,
+            fileName: selectedFile.name,
+            fileType: selectedFile.type || 'audio/wav'
+          })
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        data = await response.json();
       }
 
-      const data = await response.json();
-      
-      if (data.transcription) {
-        setTranscript(typeof data.transcription === 'string' ? data.transcription : JSON.stringify(data.transcription, null, 2));
+      // Node server returns { transcription }, function returns { success, transcript }
+      const t = data.transcription || data.transcript || data?.result?.text;
+      if (t) {
+        setTranscript(typeof t === 'string' ? t : JSON.stringify(t, null, 2));
       } else {
         setError(data.error || 'Failed to transcribe file');
       }
