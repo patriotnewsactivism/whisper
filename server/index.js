@@ -5,25 +5,15 @@ const path = require('path');
 const fs = require('fs').promises;
 require('dotenv').config();
 
-// Import database
-const { testConnection, initializeSchema } = require('./db/connection');
+// Database connection will be loaded only if configured
 
 // Import services
-const { transcribeWithElevateAI } = require('./services/elevateai-service');
-const { getYouTubeTranscript } = require('./services/youtube-service');
-const { selectTranscriptionService } = require('./services/transcription-orchestrator');
-const { startRecording, stopRecording, getRecordingStatus } = require('./services/audio-recorder-service');
-const { routeAIRequest } = require('./services/ai-bot-router');
-const { initializeUsage, trackTranscription } = require('./services/usage-service');
+const youtubeService = require('./services/youtube-service');
+const whisperService = require('./services/whisper-service');
 
-// Import routes
-const authRoutes = require('./routes/auth');
-const billingRoutes = require('./routes/billing');
-const usageRoutes = require('./routes/usage');
+// Routes will be conditionally loaded to avoid optional deps during basic runs
 
-// Import middleware
-const { authenticate } = require('./middleware/auth');
-const { checkUsageLimit, requireFeature } = require('./middleware/subscription');
+// Note: auth and subscription middleware are only needed when those routes are enabled
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -32,17 +22,32 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// Initialize database on startup
-(async () => {
-  console.log('🔄 Initializing database...');
-  const connected = await testConnection();
-  if (connected) {
-    await initializeSchema();
-    console.log('✅ Database ready');
-  } else {
-    console.log('⚠️  Database not connected - running without persistence');
-  }
-})();
+// Serve built client when available
+try {
+  const distPath = path.resolve(__dirname, '../client/dist');
+  app.use(express.static(distPath));
+} catch (_) {
+  // ignore if not present
+}
+
+// Initialize database on startup if DATABASE_URL exists
+if (process.env.DATABASE_URL) {
+  (async () => {
+    try {
+      const { testConnection, initializeSchema } = require('./db/connection');
+      console.log('🔄 Initializing database...');
+      const connected = await testConnection();
+      if (connected) {
+        await initializeSchema();
+        console.log('✅ Database ready');
+      } else {
+        console.log('⚠️  Database not connected - running without persistence');
+      }
+    } catch (err) {
+      console.warn('Database initialization skipped:', err.message);
+    }
+  })();
+}
 
 // Configure multer for file uploads
 const upload = multer({
@@ -52,10 +57,26 @@ const upload = multer({
   }
 });
 
-// API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/billing', billingRoutes);
-app.use('/api/usage', usageRoutes);
+// API Routes (conditionally mount heavy routes)
+if (process.env.DATABASE_URL) {
+  try {
+    const authRoutes = require('./routes/auth');
+    const usageRoutes = require('./routes/usage');
+    app.use('/api/auth', authRoutes);
+    app.use('/api/usage', usageRoutes);
+  } catch (err) {
+    console.warn('Auth/Usage routes not mounted:', err.message);
+  }
+}
+
+if (process.env.DATABASE_URL && process.env.STRIPE_SECRET_KEY) {
+  try {
+    const billingRoutes = require('./routes/billing');
+    app.use('/api/billing', billingRoutes);
+  } catch (err) {
+    console.warn('Billing routes not mounted:', err.message);
+  }
+}
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -82,14 +103,37 @@ app.post('/api/youtube-transcript', async (req, res) => {
       return res.status(400).json({ error: 'YouTube URL is required' });
     }
 
-    const transcript = await getYouTubeTranscript(url);
-    res.json({ transcript });
+    const result = await youtubeService.getTranscript(url);
+    if (result.success) {
+      const transcriptText = result.text || (result.segments || []).map(s => s.text).join(' ');
+      return res.json({ transcript: transcriptText, metadata: result.metadata });
+    }
+    return res.status(500).json({ error: result.error || 'Failed to get YouTube transcript' });
   } catch (error) {
     console.error('YouTube transcript error:', error);
     res.status(500).json({ 
       error: 'Failed to get YouTube transcript',
       details: error.message 
     });
+  }
+});
+
+// Alias for Netlify-style path when serving static build from Node
+app.post('/api/transcribe-youtube', async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) {
+      return res.status(400).json({ error: 'YouTube URL is required' });
+    }
+    const result = await youtubeService.getTranscript(url);
+    if (result.success) {
+      const transcriptText = result.text || (result.segments || []).map(s => s.text).join(' ');
+      return res.json({ transcript: transcriptText, metadata: result.metadata });
+    }
+    return res.status(500).json({ error: result.error || 'Failed to get YouTube transcript' });
+  } catch (error) {
+    console.error('YouTube transcript error (alias):', error);
+    res.status(500).json({ error: 'Failed to get YouTube transcript', details: error.message });
   }
 });
 
@@ -103,45 +147,26 @@ app.post('/api/transcribe',
     }
 
     const filePath = req.file.path;
-    const fileSize = req.file.size;
-    const mimeType = req.file.mimetype;
+    const mimeType = req.file.mimetype || 'audio/wav';
 
-    // Select the best service for this file
-    const selectedService = selectTranscriptionService(fileSize, mimeType);
-    
-    let transcription;
-    
-    switch (selectedService) {
-      case 'elevateai':
-        transcription = await transcribeWithElevateAI(filePath);
-        break;
-      case 'assemblyai':
-        // Import AssemblyAI service dynamically
-        const { transcribeWithAssemblyAI } = require('./services/assemblyai-service');
-        transcription = await transcribeWithAssemblyAI(filePath);
-        break;
-      case 'openai':
-        // Import OpenAI Whisper service dynamically
-        const { transcribeWithWhisper } = require('./services/whisper-service');
-        transcription = await transcribeWithWhisper(filePath);
-        break;
-      default:
-        throw new Error('No suitable transcription service available');
+    // If OpenAI key missing, return a simple mock so the flow works
+    if (!process.env.OPENAI_API_KEY) {
+      await fs.unlink(filePath);
+      return res.json({
+        transcription: `Mock transcription for ${req.file.originalname || 'audio'} (${mimeType}). Add OPENAI_API_KEY to enable real Whisper.`,
+        service: 'mock'
+      });
     }
 
-    // Track usage (if user is authenticated)
-    if (req.user) {
-      const durationMinutes = Math.ceil(fileSize / (1024 * 1024 * 2)); // Rough estimate
-      trackTranscription(req.user.userId, durationMinutes);
-    }
+    // Use Whisper by default
+    const result = await whisperService.transcribeFile(filePath, mimeType);
 
     // Clean up uploaded file
     await fs.unlink(filePath);
 
     res.json({ 
-      transcription,
-      service: selectedService,
-      minutesUsed: durationMinutes
+      transcription: result.text,
+      service: 'whisper'
     });
   } catch (error) {
     console.error('Transcription error:', error);
@@ -162,69 +187,47 @@ app.post('/api/transcribe',
   }
 });
 
-// Live recording endpoints
-app.post('/api/recording/start', async (req, res) => {
+// Alias for Netlify-style upload path using JSON base64 body
+app.post('/api/transcribe-upload', async (req, res) => {
   try {
-    const { sessionId } = req.body;
-    const result = await startRecording(sessionId);
-    res.json(result);
-  } catch (error) {
-    console.error('Start recording error:', error);
-    res.status(500).json({ 
-      error: 'Failed to start recording',
-      details: error.message 
-    });
-  }
-});
-
-app.post('/api/recording/stop', async (req, res) => {
-  try {
-    const { sessionId } = req.body;
-    const result = await stopRecording(sessionId);
-    res.json(result);
-  } catch (error) {
-    console.error('Stop recording error:', error);
-    res.status(500).json({ 
-      error: 'Failed to stop recording',
-      details: error.message 
-    });
-  }
-});
-
-app.get('/api/recording/status/:sessionId', async (req, res) => {
-  try {
-    const { sessionId } = req.params;
-    const status = await getRecordingStatus(sessionId);
-    res.json(status);
-  } catch (error) {
-    console.error('Get recording status error:', error);
-    res.status(500).json({ 
-      error: 'Failed to get recording status',
-      details: error.message 
-    });
-  }
-});
-
-// AI Bot endpoint (optionally protected for development)
-app.post('/api/ai-bot',
-  async (req, res) => {
-  try {
-    const { message, context, preferredService } = req.body;
-    
-    if (!message) {
-      return res.status(400).json({ error: 'Message is required' });
+    const { file, fileName, fileType } = req.body || {};
+    if (!file || !fileName) {
+      return res.status(400).json({ error: 'File data is required' });
     }
 
-    const response = await routeAIRequest(message, context, preferredService);
-    res.json(response);
-  } catch (error) {
-    console.error('AI Bot error:', error);
-    res.status(500).json({ 
-      error: 'AI request failed',
-      details: error.message 
+    const buffer = Buffer.from(file, 'base64');
+    const safeName = String(fileName).replace(/[^a-zA-Z0-9.-]/g, '_');
+    const uploadDir = path.resolve(process.cwd(), 'uploads');
+    await fs.mkdir(uploadDir, { recursive: true });
+    const tmpPath = path.join(uploadDir, `${Date.now()}_${safeName}`);
+    await fs.writeFile(tmpPath, buffer);
+
+    if (!process.env.OPENAI_API_KEY) {
+      await fs.unlink(tmpPath).catch(() => {});
+      return res.json({
+        success: true,
+        transcript: `Mock transcription for ${safeName} (${fileType || 'audio/*'}). Add OPENAI_API_KEY to enable real Whisper.`,
+        service: 'mock'
+      });
+    }
+
+    const result = await whisperService.transcribeFile(tmpPath, fileType || 'audio/wav');
+    await fs.unlink(tmpPath).catch(() => {});
+
+    return res.json({
+      success: true,
+      transcript: result.text,
+      service: 'whisper'
     });
+  } catch (error) {
+    console.error('JSON upload transcription error:', error);
+    return res.status(500).json({ error: 'Transcription failed', details: error.message });
   }
 });
+
+// Note: Additional endpoints (recording, AI bot, billing, etc.) can be re-enabled
+// once their corresponding services are fully wired. Core transcription endpoints
+// above are sufficient for initial functionality.
 
 // Start server (bind to all interfaces for Replit)
 app.listen(PORT, () => {
